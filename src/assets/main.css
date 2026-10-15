@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Taruh file .otf di folder yang sama dengan main.css ini.
+   Nama file harus persis sama dengan yang ada di url() di bawah. */
+@font-face {
+  font-family: 'CreepyFont';
+  src: url('./TwistedHalloween_PERSONAL_USE_ONLY.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  /* Versi demo font ini mengganti angka 0-9, ":" dan "*" dengan gambar watermark.
+     Karakter itu dikecualikan di sini supaya otomatis memakai font cadangan (Baloo 2).
+     Kalau nanti memakai versi berlisensi penuh, baris unicode-range ini boleh dihapus. */
+  unicode-range: U+0020-0029, U+002B-002F, U+003B-007E, U+00A0-00FF, U+2013-2014, U+2018-201D, U+2026;
+}
+
+body {
+  font-family: 'CreepyFont', 'Baloo 2', sans-serif;
+  background-color: #1a0b2e; 
+  letter-spacing: 0.05em;
+  margin: 0;
+  padding: 0;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(236, 72, 153, 0.5); 
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.8); 
+}
