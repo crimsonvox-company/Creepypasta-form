@@ -279,7 +279,7 @@
                   <h2 class="success__title">TERIMA KASIH!</h2>
                   <p class="success__text">
                     Bisikanmu sudah kami terima<template v-if="form.name.trim()">, {{ form.name.trim() }}</template>.
-                    Kalau ceritamu terpilih, kami akan memberi kabar lewat akun yang kamu cantumkan.
+                    Terimakasih telah mengikuti event ini
                   </p>
                   <button type="button" class="submit submit--pill" @click="resetForm">
                     <span class="submit__label">KIRIM CERITA LAIN</span>
