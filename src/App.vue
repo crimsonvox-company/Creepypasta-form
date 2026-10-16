@@ -157,7 +157,7 @@
                       :aria-pressed="inputType === 'text'"
                       @click="inputType = 'text'"
                     >
-                      Ketik Manual
+                      Ketik Disini
                     </button>
                     <button
                       type="button"
