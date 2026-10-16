@@ -7,6 +7,28 @@
       aria-hidden="true"
     ></div>
 
+    <!-- Tombol musik: pasangan logo, tersedia sejak layar loading -->
+    <button
+      type="button"
+      class="music-toggle"
+      :class="{ 'is-on': musicOn, 'music-toggle--hint': !musicTouched }"
+      :aria-pressed="musicOn"
+      aria-label="Musik latar"
+      :title="musicOn ? 'Matikan musik' : 'Nyalakan musik'"
+      @click="toggleMusic"
+    >
+      <svg class="music-toggle__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 9.5v5h3.6l4.9 4.5V5L7.6 9.5H4z" fill="currentColor" />
+        <g v-if="musicOn" class="music-toggle__waves" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M15.6 9a4.2 4.2 0 0 1 0 6" />
+          <path d="M18.2 6.4a8 8 0 0 1 0 11.2" />
+        </g>
+        <g v-else fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M16 9.5l5 5M21 9.5l-5 5" />
+        </g>
+      </svg>
+    </button>
+
     <Transition name="fade" mode="out-in">
       <!-- ========================================== -->
       <!-- 1. LOADING SCREEN (SPLASH) -->
@@ -157,7 +179,7 @@
                       :aria-pressed="inputType === 'text'"
                       @click="inputType = 'text'"
                     >
-                      Ketik Disini
+                      Ketik Manual
                     </button>
                     <button
                       type="button"
@@ -293,13 +315,13 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 
-// Pastikan alias '@' mengarah ke 'src' (default di proyek Vite + Vue).
 import bgMain from '@/assets/bg-main.png'
 import frameImg from '@/assets/frame.png'
 import titleImg from '@/assets/title.png'
 import slimeSide from '@/assets/slime-side.png'
 import mascotImg from '@/assets/mascot.png'
 import logoImg from '@/assets/logo.png'
+import bgmFile from '@/assets/creepy-bgm.mp3'
 
 type Screen = 'loading' | 'form' | 'success'
 type Handle = 'instagram' | 'tiktok'
@@ -392,6 +414,88 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('resize', updateViewport)
   if (pokeTimer) clearTimeout(pokeTimer)
+})
+
+// ---------- Musik latar ----------
+// Browser melarang suara otomatis sebelum ada ketukan/klik, jadi musik mulai dalam
+// keadaan mati dan baru menyala saat tombol ditekan.
+const MUSIC_VOLUME = 0.4 // 0.0 (bisu) sampai 1.0 (maksimal). Diabaikan oleh iPhone/iPad.
+const MUSIC_FADE_MS = 700
+
+const musicOn = ref(false) // pilihan pengguna, menentukan ikon tombol
+const musicTouched = ref(false) // sudah pernah ditekan? Setelah itu cincin ajakan berhenti
+let bgm: HTMLAudioElement | null = null
+let fadeTimer: ReturnType<typeof setInterval> | undefined
+
+// Naik/turunkan volume pelan-pelan supaya musik tidak tiba-tiba "jedor" atau terputus.
+// Kalau ada fade baru di tengah jalan, fade lama dibatalkan (done lama tidak dipanggil).
+const fadeTo = (target: number, done?: () => void) => {
+  if (!bgm) return
+  const audio = bgm
+  if (fadeTimer) clearInterval(fadeTimer)
+  const from = audio.volume
+  const steps = Math.round(MUSIC_FADE_MS / 40)
+  let i = 0
+  fadeTimer = setInterval(() => {
+    i += 1
+    audio.volume = from + ((target - from) * i) / steps
+    if (i >= steps) {
+      clearInterval(fadeTimer)
+      fadeTimer = undefined
+      done?.()
+    }
+  }, 40)
+}
+
+const startMusic = async () => {
+  if (!bgm) return false
+  try {
+    await bgm.play()
+    fadeTo(MUSIC_VOLUME)
+    return true
+  } catch (err) {
+    // Diblokir browser, atau file musik tidak ditemukan / tidak bisa diputar
+    console.warn('Musik tidak bisa diputar:', err)
+    return false
+  }
+}
+
+const toggleMusic = async () => {
+  if (!bgm) return
+  musicTouched.value = true
+  if (musicOn.value) {
+    musicOn.value = false
+    fadeTo(0, () => bgm?.pause())
+  } else {
+    musicOn.value = true // ikon langsung berubah, tidak menunggu browser
+    if (!(await startMusic())) musicOn.value = false
+  }
+}
+
+// Pindah tab / kunci layar: musik berhenti, lalu lanjut sendiri kalau pengguna masih menyalakannya.
+const onVisibilityChange = async () => {
+  if (!bgm) return
+  if (document.hidden) {
+    bgm.pause()
+  } else if (musicOn.value && !(await startMusic())) {
+    musicOn.value = false
+  }
+}
+
+onMounted(() => {
+  bgm = new Audio(bgmFile)
+  bgm.loop = true
+  bgm.preload = 'auto'
+  bgm.volume = 0 // dinaikkan pelan-pelan saat musik dinyalakan
+  bgm.addEventListener('error', () => (musicOn.value = false))
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (fadeTimer) clearInterval(fadeTimer)
+  bgm?.pause()
+  bgm = null
 })
 
 // ---------- Maskot ----------
@@ -1366,6 +1470,77 @@ const resetForm = () => {
   transform: rotate(-45deg);
 }
 
+/* ================= Musik ================= */
+/* Lencana bundar di pojok kanan atas, pasangan logo di pojok kiri atas.
+   Mati: kaca ungu gelap berikon pink. Menyala: lencana pink bercahaya seperti logo. */
+.music-toggle {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 50; /* selalu di atas semua layar */
+  display: grid;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #ec4899;
+  color: #f9a8d4;
+  background: rgba(59, 7, 100, 0.8);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.5);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s, background 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+.app--wide .music-toggle {
+  top: 24px;
+  right: 34px;
+  width: 3.4rem;
+  height: 3.4rem;
+}
+.music-toggle:hover {
+  transform: scale(1.08);
+  background: rgba(157, 23, 77, 0.8);
+}
+.music-toggle:active {
+  transform: scale(0.95);
+}
+.music-toggle:focus-visible {
+  outline: 3px solid #fed7aa;
+  outline-offset: 3px;
+}
+.music-toggle.is-on {
+  color: #4a0b5c;
+  border-color: #ffe0ff;
+  background: linear-gradient(160deg, #ffc2ff, #f08cf0);
+  box-shadow: 0 0 18px rgba(236, 72, 153, 0.75);
+}
+.music-toggle.is-on:hover {
+  background: linear-gradient(160deg, #ffd0ff, #f59df5);
+}
+.music-toggle__icon {
+  width: 58%;
+  height: 58%;
+}
+.music-toggle__waves path {
+  animation: wave 1.6s ease-in-out infinite;
+}
+.music-toggle__waves path:nth-child(2) {
+  animation-delay: 0.25s;
+}
+/* Ajakan: cincin menyebar 3 kali, hanya sebelum tombol pertama kali disentuh */
+.music-toggle--hint::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid #ec4899;
+  opacity: 0;
+  pointer-events: none;
+  animation: ring 1.8s ease-out 2.2s 3 forwards;
+}
+
 /* ================= Tablet portrait ================= */
 @media (min-width: 600px) {
   .group--col,
@@ -1432,6 +1607,14 @@ const resetForm = () => {
   from { transform: scaleY(1); }
   to { transform: scaleY(0.55); }
 }
+@keyframes wave {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@keyframes ring {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
 .animate-glow {
   animation: glow 1.6s ease-in-out infinite;
 }
@@ -1480,7 +1663,9 @@ const resetForm = () => {
   .shake,
   .spinner,
   .submit::after,
-  .submit__bat {
+  .submit__bat,
+  .music-toggle__waves path,
+  .music-toggle--hint::after {
     animation: none !important;
   }
   .toggle__pill,
