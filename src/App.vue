@@ -157,7 +157,7 @@
                       :aria-pressed="inputType === 'text'"
                       @click="inputType = 'text'"
                     >
-                      Mengetik
+                      Ketik Manual
                     </button>
                     <button
                       type="button"
@@ -307,7 +307,9 @@ type Focus = 'idle' | 'name' | Handle | 'text' | 'file'
 
 const MAX_CHARS = 5000
 const MIN_CHARS = 30
-const MAX_FILE_MB = 5
+// Samakan dengan backend (4 MB)
+const MAX_FILE_MB = 4
+const API_URL = 'https://backend-creepypasta.vercel.app/api/submit'
 // Username IG: huruf, angka, titik, underscore (maks. 30). TikTok sama (maks. 24).
 const HANDLE_RE = /^[A-Za-z0-9._]+$/
 
@@ -493,6 +495,20 @@ const removeFile = () => {
   file.value = null
 }
 
+// ---------- Fungsi Bantuan: File ke Base64 ----------
+const fileToBase64 = (f: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      // Hapus prefix "data:application/pdf;base64," dan ambil string aslinya saja
+      const base64String = (reader.result as string).split(',')[1] ?? ''
+      if (base64String) resolve(base64String)
+      else reject(new Error('File tidak bisa dibaca. Coba pilih file lain.'))
+    }
+    reader.onerror = () => reject(new Error('File tidak bisa dibaca. Coba pilih file lain.'))
+    reader.readAsDataURL(f)
+  })
+
 // ---------- Kirim ----------
 const validate = () => {
   errors.name = form.name.trim() ? '' : 'Wajib diisi.'
@@ -520,19 +536,52 @@ const submitStory = async () => {
     return
   }
   isSubmitting.value = true
-  try {
-    const payload = new FormData()
-    payload.append('name', form.name.trim())
-    if (form.instagram) payload.append('instagram', `@${form.instagram}`)
-    if (form.tiktok) payload.append('tiktok', `@${form.tiktok}`)
-    if (inputType.value === 'text') payload.append('story', form.text.trim())
-    else if (file.value) payload.append('file', file.value)
 
-    // TODO: ganti dengan request ke API-mu, mis.
-    // await fetch('/api/stories', { method: 'POST', body: payload })
-    void payload
-    await new Promise((resolve) => setTimeout(resolve, 1200))
+  try {
+    // Struktur data JSON sesuai permintaan backend Drizzle
+    const payload: Record<string, string | null> = {
+      authorName: form.name.trim(),
+      instagram: form.instagram ? `@${form.instagram}` : null,
+      tiktok: form.tiktok ? `@${form.tiktok}` : null,
+    }
+
+    if (inputType.value === 'text') {
+      payload.storyText = form.text.trim()
+    } else if (file.value) {
+      payload.fileName = file.value.name
+      payload.fileBase64 = await fileToBase64(file.value)
+    }
+
+    // Panggil API Vercel
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    // Balasan bisa bukan JSON (mis. 413 dari Vercel), jadi jangan langsung .json()
+    const data = await response.json().catch(() => null)
+
+    // Tangkap error dari backend jika sukses: false
+    if (!response.ok || !data?.success) {
+      const tooBig = response.status === 413
+      throw new Error(
+        data?.message ||
+          (tooBig ? 'File terlalu besar untuk dikirim. Coba file yang lebih kecil.' : 'Terjadi kesalahan pada server.'),
+      )
+    }
+
     currentScreen.value = 'success'
+  } catch (error) {
+    console.error('Error submit:', error)
+    // Gagal fetch (offline / CORS) berupa TypeError berbahasa Inggris, jadi diganti pesan sendiri
+    const isNetworkError = error instanceof TypeError
+    errors.content =
+      !isNetworkError && error instanceof Error && error.message
+        ? error.message
+        : 'Gagal terhubung ke server. Coba lagi nanti.'
+    shaking.value = true
+    setTimeout(() => (shaking.value = false), 500)
   } finally {
     isSubmitting.value = false
   }
